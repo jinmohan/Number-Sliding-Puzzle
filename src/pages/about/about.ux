@@ -1,0 +1,103 @@
+<template>
+  <div class="page">
+    <div class="header">
+      <image class="btn" @touchstart="routerBack" src="/common/icon/Back_B.png"></image>
+      </div>
+  </div>
+</template>
+
+<script>
+import router from "@system.router"
+
+export default {
+  private: {
+    hours: 0,
+    minute: 0,
+    intervalId: null,
+    pressTimer: null, 
+    pressDuration: 1000 
+  },
+
+  routerBack() {
+    router.push({
+      uri: "/pages/index"
+    })
+  }
+}
+</script>
+
+<style>
+/* ============================================================== */
+/* 第 1 层：跑道屏基础级样式 (跑道屏尺寸 192x490)                  */
+/* ============================================================== */
+.page {
+  flex-direction: column;
+  /* 核心修复：宽度100%，配合 align-items 自动水平居中子元素 */
+  width: 100%; 
+  height: 100%; 
+  align-items: center; 
+  margin: 0;
+  padding: 0;
+  overflow-y: scroll; 
+  -webkit-overflow-scrolling: touch; 
+  background-color: rgb(0, 0, 0); 
+}
+
+.header {
+  flex-direction: column;
+  align-items: center; /* 让内部的返回按钮也居中 */
+  width: 192px;
+  height: 821px; 
+  background-color: #000;
+  background-image: url("/common/info.png");
+  background-position: top center; 
+  background-repeat: no-repeat;
+  /* 改用 100% 100%，方便在不同屏幕等比缩放图片 */
+  background-size: 100% 100%; 
+  padding-bottom: 20px; /* 底部留点呼吸空间防止滚动贴底 */
+}
+
+.btn {
+  width: 100px;
+  height: 70px;
+  margin-top: 10px; /* 修正了原本无效的负 padding，改为按钮顶边距 */
+  border-radius: 50%;
+  background-color: #a3a3a300;
+  font-size: 20px;
+  color: #ffffff;
+  object-fit: contain; /* 防止图片拉伸 */
+}
+
+/* ============================================================== */
+/* 第 2 层：媒体查询 - 适配圆形表盘 (如 Watch S4 466x466)          */
+/* ============================================================== */
+@media (shape: circle) {
+  .header {
+    /* 等比例放大图片，增强手表端阅读体验 */
+    width: 240px;
+    height: 1014px; /* 240 / 192 * 811 = 1014 */
+  }
+  .btn {
+    /* 手表顶部有圆弧，按钮稍微往下移一点防裁切 */
+    margin-top: 10px; 
+    width: 120px;
+    height: 84px;
+  }
+}
+
+/* ============================================================== */
+/* 第 3 层：媒体查询 - 适配宽屏矩形设备 (如手环9 Pro 336x480)      */
+/* ============================================================== */
+@media (min-width: 150) and (shape: rect) {
+  .header {
+    /* 大宽屏等比例放大，充分利用屏幕宽度 */
+    width: 280px;
+    height: 1183px; /* 280 / 192 * 811 = 1183 */
+  }
+  .btn {
+    margin-top: 25px;
+    width: 120px;
+    height: 84px;
+  }
+}
+</style>

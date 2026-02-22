@@ -1,0 +1,125 @@
+<template>
+  <div class="container">
+    <text class="title">最好成绩</text>
+
+    <!-- 3x3 成绩显示 -->
+    <div class="score-group">
+      <text class="score-size">3x3</text>
+      <text class="score-details" if="{{ bestScores['3x3'] }}">
+        {{ bestScores["3x3"].steps }}步 {{ bestScores["3x3"].time }}秒
+      </text>
+      <text class="score-details no-record" if="{{ !bestScores['3x3'] }}">暂无记录</text>
+    </div>
+
+    <!-- 4x4 成绩显示 -->
+    <div class="score-group">
+      <text class="score-size">4x4</text>
+      <text class="score-details" if="{{ bestScores['4x4'] }}">
+        {{ bestScores["4x4"].steps }}步 {{ bestScores["4x4"].time }}秒
+      </text>
+      <text class="score-details no-record" if="{{ !bestScores['4x4'] }}">暂无记录</text>
+    </div>
+
+    <!-- 5x5 成绩显示 -->
+    <div class="score-group">
+      <text class="score-size">5x5</text>
+      <text class="score-details" if="{{ bestScores['5x5'] }}">
+        {{ bestScores["5x5"].steps }}步 {{ bestScores["5x5"].time }}秒
+      </text>
+      <text class="score-details no-record" if="{{ !bestScores['5x5'] }}">暂无记录</text>
+    </div>
+
+    <!-- <input type="button" class="back-button" onclick="routePhb" value="分享成绩" /> -->
+    <!-- <image
+    class="button"
+    @touchstart="routerBack"
+    src="/common/share.png"
+    onclick="routePhb"
+  ></image> -->
+  </div>
+</template>
+
+<script>
+import router from "@system.router"
+import storage from "@system.storage"
+
+export default {
+  private: {
+    bestScores: {} // 存储所有模式的最佳成绩
+  },
+  onInit() {
+    this.loadBestScores()
+  },
+  loadBestScores() {
+    storage.get({
+      key: "bestScores", // 读取新的存储键
+      success: (data) => {
+        if (data) {
+          this.bestScores = JSON.parse(data)
+        }
+      },
+      fail: () => {
+        console.log("读取最好成绩失败")
+      }
+    })
+  },
+  goBack() {
+    router.back()
+  },
+
+routePhb() {
+  router.push({
+    uri: "/pages/phb"
+  })
+}
+}
+</script>
+
+<style>
+/* ========== 适配统一配色方案的样式 ========== */
+.container {
+  width: 192px;
+  height: 490px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 20px 0;
+  background-color: #FAF8EF; /* 替换为统一的柔和米白色背景 */
+}
+.title {
+  font-size: 30px;
+  font-weight: bold;
+  color: #776E65; /* 替换为高级暖灰色标题色 */
+  margin-bottom: 30px;
+}
+.score-group {
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 25px;
+}
+.score-size {
+  font-size: 20px;
+  color: #776E65; /* 与标题同色系，保持视觉统一 */
+}
+.score-details {
+  font-size: 18px;
+  color: #5C544D; /* 替换为更深的暖灰色，提升可读性 */
+  margin-top: 5px;
+}
+.no-record {
+  font-size: 16px;
+  color: #A09383; /* 替换为低对比度的副标题色，弱化无记录提示 */
+}
+.back-button {
+  position: absolute; /* 将按钮固定在底部 */
+  bottom: 30px;
+  width: 102px;
+  height: 72px;
+  background-color: #8F7A66; /* 替换为选中态的摩卡棕 */
+  border: 2px solid transparent; /* 统一边框样式，避免尺寸跳动 */
+  color: #FFFFFF; /* 文字反白提升辨识度 */
+  font-size: 16px;
+  text-align: center;
+  border-radius: 50px;
+}
+</style>

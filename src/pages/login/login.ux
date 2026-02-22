@@ -1,0 +1,89 @@
+
+
+<!-- Login.UX---Lite仅保留展示图片的功能，动画效果由JS实现，确保在所有平台上都能流畅运行。 -->
+<template>
+  <div class="container">
+    <image 
+      class="splash-image" 
+      src="/common/login.png" 
+      style="opacity: {{ currentOpacity }};"
+    ></image>
+  </div>
+</template>
+
+<script>
+import router from "@system.router"
+
+export default {
+  private: {
+    currentOpacity: 0.1, // 初始透明度设为 0.1 (10%)
+    timer: null          // 定时器变量
+  },
+
+  onInit() {
+    // 页面初始化时立即开始 JS 动画
+    this.startJsAnimation()
+  },
+
+  onDestroy() {
+    // 页面销毁时务必清除定时器，防止内存泄漏
+    if (this.timer) {
+      clearInterval(this.timer)
+      this.timer = null
+    }
+  },
+
+  startJsAnimation() {
+    const duration = 1000      // 动画总时长 1秒
+    const interval = 30        // 刷新间隔 30ms (约33帧/秒，既流畅又省电)
+    const startVal = 0.01       // 起始透明度 1%
+    const endVal = 1.0         // 结束透明度 100%
+    const changeVal = endVal - startVal // 总共需要改变的量 (0.9)
+    
+    const startTime = new Date().getTime() // 记录开始时间
+
+    this.timer = setInterval(() => {
+      const now = new Date().getTime()
+      const passedTime = now - startTime // 已经过了多久
+      
+      // 计算进度 (0.0 到 1.0)
+      let progress = passedTime / duration
+
+      if (progress >= 1) {
+        // === 动画结束 ===
+        this.currentOpacity = endVal // 确保最终是 1.0
+        clearInterval(this.timer)    // 停止定时器
+        this.jumpToIndex()           // 跳转页面
+      } else {
+        // === 动画进行中 ===
+        // 当前透明度 = 起始值 + (总变化量 * 进度)
+        this.currentOpacity = startVal + (changeVal * progress)
+      }
+    }, interval)
+  },
+
+  jumpToIndex() {
+    router.replace({
+      uri: '/pages/index'
+    })
+  }
+}
+</script>
+
+<style>
+  .container {
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: #000000;  
+    /* 滚木Vela不加背景颜色模拟器会闪白色,结果实机还不影响浪费我半小时🤬*/
+  }
+
+  .splash-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+</style>

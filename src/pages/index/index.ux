@@ -1,0 +1,281 @@
+<template>
+  <div class="demo-page">
+    <div class="time-container">
+      <text class="time rotate-left">{{ time[0] }}</text>
+      <text class="time rotate-small-left">{{ time[1] }}</text>
+      <text class="time colon">:</text>
+      <text class="time rotate-small-right">{{ time[2] }}</text>
+      <text class="time rotate-right">{{ time[3] }}</text>
+    </div>
+    
+    <div class="content-wrap" style="margin-top: {{offsetY}}px;">
+      <text class="title">数字华容道Pro</text>
+      <input class="btn" type="button" value="开始游戏" onclick="routeGame" />
+      <input class="btn" type="button" value="最好成绩" onclick="routeLsjl" />
+      <text class="caidan" onclick="routeAbout">...</text>
+    </div>
+
+  </div>
+</template>
+
+<script>
+import router from "@system.router"
+import app from "@system.app"
+import storage from "@system.storage"
+import prompt from "@system.prompt"
+
+export default {
+  private: {
+    title: "示例页面1",
+    time: ["0", "0", "0", "0"],
+    isActivated: false,
+    showActivationError: false,
+    offsetY: 80 // 调整：初始位置改为下移 80px (增加动画幅度)
+  },
+
+  onInit() {
+    this.checkActivationStatus()
+    this.updateTime()
+    setInterval(() => this.updateTime(), 60000)
+  },
+
+  onShow() {
+    this.playEnterAnimation()
+  },
+
+  // JS 动画核心逻辑
+  playEnterAnimation() {
+    this.offsetY = 80; 
+    const duration = 620; // 调整：动画持续时间延长到 620 毫秒
+    const startTime = Date.now();
+    const startY = 80;
+
+    const animate = () => {
+      const now = Date.now();
+      let progress = (now - startTime) / duration;
+
+      if (progress >= 1) {
+        this.offsetY = 0; 
+        return;
+      }
+
+      // 减速缓动算法
+      const easeOutProgress = 1 - Math.pow(1 - progress, 3);
+      
+      // 必须使用 Math.round() 取整，防止黑屏
+      this.offsetY = Math.round(startY * (1 - easeOutProgress));
+
+      setTimeout(animate, 16);
+    };
+
+    animate();
+  },
+
+  checkActivationStatus() {
+    storage.get({
+      key: "activated",
+      success: (data) => {
+        this.isActivated = data === "true"
+      },
+      fail: () => {
+        this.isActivated = false
+      }
+    })
+  },
+
+  updateTime() {
+    const now = new Date()
+    const hours = now.getHours().toString().padStart(2, "0")
+    const minutes = now.getMinutes().toString().padStart(2, "0")
+    this.time = [hours[0], hours[1], minutes[0], minutes[1]]
+  },
+
+  routeGame() {
+    router.push({
+      uri: "/pages/game"
+    })
+  },
+
+  routeLsjl() {
+    router.push({
+      uri: "/pages/lsjl"
+    })
+  },
+
+  routePhb() {
+    router.push({
+      uri: "/pages/phb"
+    })
+  },
+
+  routeAbout() {
+    router.push({
+      uri: "/pages/about"
+    })
+  },
+
+  onBackPress() {
+    app.terminate()
+    return true
+  }
+}
+</script>
+
+<style>
+/* 引入外部字体 */
+@font-face {
+  font-family: 'Elitakoo';
+  src: url('/common/data/AaMianHuatangNon.ttf');
+}
+
+/* ============================================================== */
+/* 第 1 层：跑道屏基础级样式 (跑道屏尺寸 192x490，弧形时间)        */
+/* ============================================================== */
+
+.demo-page {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: #F5EEE6; 
+  width: 192px; 
+  height: 490px;
+  color: #704F38; 
+  position: relative;
+}
+
+.content-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.title {
+  font-size: 22px;
+  text-align: center;
+  font-weight: bold;
+  margin-top: 60px; 
+  color: #5A3F2B; 
+}
+
+.caidan {
+  font-size: 36px;
+  font-weight: bold;
+  /* 修复：使用 margin-top 代替 top，确保在 Flex 布局中生效 */
+  margin-top: 25px; 
+  color: #5A3F2B;
+  /* 增加字符间距，让点和点之间更清晰 */
+  letter-spacing: 2px;
+}
+
+.btn {
+  width: 145px; 
+  height: 58px;
+  margin-top: 20px;
+  background-color: #E8D8C4; 
+  font-size: 16px;
+  color: #5A3F2B;
+  border-radius: 22px;
+  border: 2px solid #D9BFA7; 
+}
+
+.time-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  width: 100%;
+  height: 80px;
+  position: absolute;
+  top: 0;
+  font-weight: bold;
+  margin-top: -25px;
+}
+
+.time {
+  font-family: 'Elitakoo';
+  font-size: 30px;
+  font-weight: 600;
+  color: #5A3F2B;
+  margin: 0 2px;
+}
+
+.rotate-left { transform: rotate(-21deg); left: -6px; }
+.rotate-small-left { transform: rotate(-9deg); top: -8.8px; left: -2.5px; }
+.colon { transform: none; top: -13.8px; }
+.rotate-small-right { transform: rotate(9deg); top: -11.9px; left: 4.5px; }
+.rotate-right { transform: rotate(21deg); top: -5.8px; left: 8.5px; }
+
+/* ============================================================== */
+/* 第 2 层：媒体查询 - 适配圆形表盘 (修复时间太低的问题)            */
+/* ============================================================== */
+@media (shape: circle) {
+  .demo-page {
+    width: 100%;
+    height: 100%;
+  }
+  .time-container {
+    margin-top: -20px; 
+  }
+  .title {
+    font-size: 26px;
+    margin-top: 40px; 
+  }
+  .btn {
+    width: 200px;
+    height: 70px;
+    font-size: 20px;
+    margin-top: 25px;
+  }
+  .caidan {
+    font-size: 46px;
+    /* 修复圆屏下的间距 */
+    margin-top: 20px;
+  }
+}
+
+/* ============================================================== */
+/* 第 3 层：媒体查询 - 适配宽屏矩形设备 (如手环9 Pro 336x480)     */
+/* ============================================================== */
+@media (min-width: 150) and (shape: rect) {
+  .demo-page {
+    width: 336px;
+    height: 480px;
+  }
+  .title {
+    font-size: 28px;
+    margin-top: 50px;
+  }
+  .btn {
+    width: 200px;
+    height: 65px;
+    font-size: 18px;
+    margin-top: 25px;
+  }
+  .caidan {
+    font-size: 46px;
+    /* 修复矩形屏下的间距 */
+    margin-top: 20px; 
+  }
+  
+  .time-container {
+    margin-top: 15px; 
+    height: 40px;
+    align-items: center; 
+  }
+  .time {
+    font-size: 26px; 
+    margin: 0 1px;
+  }
+  
+  .rotate-left, 
+  .rotate-small-left, 
+  .colon, 
+  .rotate-small-right, 
+  .rotate-right {
+    transform: none;
+    top: 0;
+    left: 0;
+  }
+}
+</style>

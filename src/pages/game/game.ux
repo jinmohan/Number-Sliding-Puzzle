@@ -1,0 +1,1066 @@
+<template>
+  <stack style="width: 100%; height: 100%;">
+    
+    <div class="container">
+      
+      <div class="selection-container" if="{{ currentView === 'selection' }}">
+        <div class="anim-wrap">
+          <text class="selection-title" style="margin-left: {{offsets[0]}}px;">数字华容道</text>
+          <text class="selection-subtitle" style="margin-left: {{offsets[1]}}px;">请选择游戏布局</text>
+          <input type="button" class="selection-button" style="margin-left: {{offsets[2]}}px;" value="3 x 3" onclick="selectLayout(3)" />
+          <input type="button" class="selection-button" style="margin-left: {{offsets[3]}}px;" value="4 x 4" onclick="selectLayout(4)" />
+          <input type="button" class="selection-button" style="margin-left: {{offsets[4]}}px;" value="5 x 5" onclick="selectLayout(5)" />
+          <input type="button" class="selection-button history" style="margin-left: {{offsets[5]}}px;" value="操作方式" onclick="openSettings" />
+          <input type="button" class="selection-button history" style="margin-left: {{offsets[6]}}px;" value="最好成绩" onclick="routeLsjl" />
+        </div>
+      </div>
+
+      <div class="selection-container" if="{{ currentView === 'settings' }}">
+        <div class="anim-wrap">
+          <text class="selection-title" style="margin-left: {{offsets[0]}}px;">设置</text>
+          <text class="selection-subtitle" style="margin-left: {{offsets[1]}}px;">请选择操作方式</text>
+          <input type="button" class="selection-button {{ tempControlMode === 'click' ? 'selected' : 'history' }}" style="margin-left: {{offsets[2]}}px;" value="点击移动" onclick="selectMode('click')" />
+          <input type="button" class="selection-button {{ tempControlMode === 'swipe' ? 'selected' : 'history' }}" style="margin-left: {{offsets[3]}}px;" value="滑动操作" onclick="selectMode('swipe')" />
+          <input type="button" class="selection-button {{ tempControlMode === 'gyro' ? 'selected' : 'history' }}" style="margin-left: {{offsets[4]}}px;" value="陀螺仪" onclick="selectMode('gyro')" />
+          <input type="button" class="selection-button" style="margin-left: {{offsets[5]}}px;" value="确认" onclick="confirmSettings" />
+        </div>
+      </div>
+
+      <div class="game-container" if="{{ currentView === 'game' }}" onswipe="handleSystemSwipe">
+        
+        <div class="footer base-only">
+          <image class="button" @touchstart="routerBack" src="/common/exit.png" onclick="backToSelection"></image>
+        </div>
+
+        <div class="header">
+          <text class="stats-text">步数: <span class="num-font">{{ steps }}</span></text>
+          <text class="stats-text">时间: <span class="num-font">{{ time }}</span>s</text>
+        </div>
+
+          <!-- 加这个后门 onclick="forceWinTest" 是为了测试弹窗！-->
+
+        <div class="board-container">
+          <div class="game-board" @touchstart="onTouchStart" @touchend="onTouchEnd">
+            <div
+              for="{{ tile in tiles }}"
+              class="tile tile-{{gridSize}} {{ tile.value === 0 ? 'empty' : '' }}"
+              onclick="handleTileClick(tile)"
+            >
+              <text class="tile-text text-{{gridSize}}">
+                {{ tile.value === 0 ? "" : tile.value }}
+              </text>
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <image class="button base-only" src="/common/refresh.png" onclick="startGame"></image>
+          
+          <div class="footer-buttons pro-only">
+            <image class="buttont" @touchstart="routerBack" src="/common/exit.png" onclick="backToSelection"></image>
+            <image class="buttont" src="/common/refresh.png" onclick="startGame"></image>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="modal" if="{{ showWinModal }}">
+      <div class="modal-content">
+        <image class="win-icon" src="/common/boom.png"></image>
+        <text class="win-title">太棒了，成功通关！</text>
+        
+        <div class="win-info-box">
+          <text class="win-info">难度：<span class="num-font">{{ gridSize }}</span>X<span class="num-font">{{ gridSize }}</span></text>
+          <text class="win-info">成绩：<span class="num-font">{{ finalSteps }}</span> 步 / <span class="num-font">{{ finalTime }}</span> 秒</text>
+        </div>
+
+        <div class="modal-buttons">
+          <input type="button" class="modal-btn-secondary" onclick="backToSelection" value="返回首页" />
+          <input type="button" class="modal-btn-primary" onclick="startGame" value="再来一局" />
+        </div>
+      </div>
+    </div>
+    
+  </stack>
+</template>
+
+<script>
+import router from "@system.router"
+import storage from "@system.storage"
+import sensor from "@system.sensor" 
+import brightness from "@system.brightness" 
+
+const SWIPE_THRESHOLD = 25 
+
+export default {
+  private: {
+    currentView: "selection",
+    controlMode: "click",
+    tempControlMode: "click", 
+    gridSize: 3,
+    tiles: [],
+    time: 0,
+    steps: 0,
+    finalTime: 0,
+    finalSteps: 0,
+    timer: null,
+    isTimerStarted: false,
+    gameStarted: false,
+    showWinModal: false,
+    touchStartX: 0,
+    touchStartY: 0,
+    isMoving: false,
+    gyroLastTime: 0,
+    offsets: [120, 120, 120, 120, 120, 120, 120], 
+    animToken: 0 
+  },
+
+  onInit() {
+    storage.get({
+      key: "savedControlMode",
+      success: (data) => {
+        if (data) {
+          this.controlMode = data
+          this.tempControlMode = data 
+        }
+      }
+    })
+  },
+
+  onShow() {
+    if (this.currentView === 'selection' || this.currentView === 'settings') {
+      this.playSlideInAnimation()
+    }
+  },
+  
+  onDestroy() {
+    if (this.timer) clearInterval(this.timer)
+    try { sensor.unsubscribeAccelerometer() } catch(e){}
+    try { brightness.setKeepScreenOn({ keepScreenOn: false }) } catch(e){}
+  },
+
+  playSlideInAnimation() {
+    this.animToken = Date.now(); 
+    const currentToken = this.animToken;
+    
+    const startX = 120; 
+    const duration = 400; 
+    const stagger = 60; 
+    const startTime = Date.now();
+    
+    this.offsets = [startX, startX, startX, startX, startX, startX, startX];
+
+    const animate = () => {
+      if (this.animToken !== currentToken) return;
+
+      const now = Date.now();
+      const elapsed = now - startTime;
+      let allDone = true;
+      
+      const newOffsets = [];
+
+      for (let i = 0; i < 7; i++) {
+        const itemStartTime = i * stagger; 
+
+        if (elapsed < itemStartTime) {
+          newOffsets.push(startX);
+          allDone = false;
+        } else {
+          let itemProgress = (elapsed - itemStartTime) / duration;
+          
+          if (itemProgress >= 1) {
+            newOffsets.push(0); 
+          } else {
+            const easeOutProgress = 1 - Math.pow(1 - itemProgress, 3);
+            newOffsets.push(Math.round(startX * (1 - easeOutProgress)));
+            allDone = false;
+          }
+        }
+      }
+
+      this.offsets = newOffsets;
+
+      if (!allDone) {
+        setTimeout(animate, 16);
+      }
+    };
+
+    animate();
+  },
+
+  handleSystemSwipe(e) {
+    if (e.direction === 'right') {
+      let a = 1; a++
+    }
+  },
+
+  openSettings() {
+    this.tempControlMode = this.controlMode
+    this.currentView = "settings"
+    this.playSlideInAnimation() 
+  },
+
+  selectMode(mode) {
+    this.tempControlMode = mode
+  },
+
+  confirmSettings() {
+    this.controlMode = this.tempControlMode
+    this.currentView = "selection"
+    this.playSlideInAnimation() 
+    
+    storage.set({
+      key: "savedControlMode",
+      value: this.controlMode
+    })
+  },
+
+  selectLayout(size) {
+    this.gridSize = size
+    this.currentView = "game"
+    this.startGame()
+  },
+
+  backToSelection() {
+    if (this.timer) clearInterval(this.timer)
+    try { sensor.unsubscribeAccelerometer() } catch(e){}
+    try { brightness.setKeepScreenOn({ keepScreenOn: false }) } catch(e){}
+    
+    this.gameStarted = false
+    this.showWinModal = false
+    this.isTimerStarted = false
+    this.currentView = "selection"
+    this.playSlideInAnimation() 
+  },
+
+  generateAndShuffleBoard() {
+    const size = this.gridSize * this.gridSize
+    let solvedTiles = Array.from({length: size - 1}, (_, i) => ({value: i + 1}))
+    solvedTiles.push({value: 0})
+    let emptyIndex = size - 1
+    for (let i = 0; i < 200 * this.gridSize; i++) {
+      const neighbors = []
+      const row = Math.floor(emptyIndex / this.gridSize)
+      const col = emptyIndex % this.gridSize
+      if (row > 0) neighbors.push(emptyIndex - this.gridSize)
+      if (row < this.gridSize - 1) neighbors.push(emptyIndex + this.gridSize)
+      if (col > 0) neighbors.push(emptyIndex - 1)
+      if (col < this.gridSize - 1) neighbors.push(emptyIndex + 1)
+      const moveIndex = neighbors[Math.floor(Math.random() * neighbors.length)]
+      ;[solvedTiles[emptyIndex], solvedTiles[moveIndex]] = [
+        solvedTiles[moveIndex],
+        solvedTiles[emptyIndex]
+      ]
+      emptyIndex = moveIndex
+    }
+    this.tiles = solvedTiles.map((tile, index) => ({value: tile.value, index: index}))
+  },
+
+  startGame() {
+    this.showWinModal = false
+    this.time = 0
+    this.steps = 0
+    this.isTimerStarted = false 
+    if (this.timer) clearInterval(this.timer)
+    
+    this.generateAndShuffleBoard()
+    this.gameStarted = true
+    
+    if (this.controlMode === 'gyro') {
+      this.startGyroListener()
+      try { brightness.setKeepScreenOn({ keepScreenOn: true }) } catch(e){}
+    } else {
+      try { sensor.unsubscribeAccelerometer() } catch(e){}
+      try { brightness.setKeepScreenOn({ keepScreenOn: false }) } catch(e){}
+    }
+  },
+
+  doMove(targetIndex, emptyIndex) {
+    this.isMoving = true
+    this.steps++
+    
+    if (!this.isTimerStarted) {
+      this.isTimerStarted = true
+      this.timer = setInterval(() => {
+        this.time++
+      }, 1000)
+    }
+
+    const tempTiles = [...this.tiles]
+    ;[tempTiles[emptyIndex], tempTiles[targetIndex]] = [
+      tempTiles[targetIndex],
+      tempTiles[emptyIndex]
+    ]
+    this.tiles = tempTiles.map((t, index) => ({value: t.value, index: index}))
+    
+    this.checkWin()
+
+    setTimeout(() => {
+      this.isMoving = false
+    }, 100)
+  },
+
+  handleTileClick(clickedTile) {
+    if (this.controlMode !== 'click') return 
+    if (!this.gameStarted || this.isMoving) return
+
+    const emptyTile = this.tiles.find(t => t.value === 0)
+    const emptyIndex = emptyTile.index
+    const targetIndex = clickedTile.index
+
+    const r1 = Math.floor(emptyIndex / this.gridSize)
+    const c1 = emptyIndex % this.gridSize
+    const r2 = Math.floor(targetIndex / this.gridSize)
+    const c2 = targetIndex % this.gridSize
+    
+    if (Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1) {
+      this.doMove(targetIndex, emptyIndex)
+    }
+  },
+
+  onTouchStart(e) {
+    if (this.controlMode !== 'swipe') return
+    if (!this.gameStarted || this.isMoving) return
+    this.touchStartX = e.touches[0].clientX
+    this.touchStartY = e.touches[0].clientY
+  },
+
+  onTouchEnd(e) {
+    if (this.controlMode !== 'swipe') return
+    if (!this.gameStarted || this.isMoving) return
+
+    const touchEndX = e.changedTouches[0].clientX
+    const touchEndY = e.changedTouches[0].clientY
+    const deltaX = touchEndX - this.touchStartX
+    const deltaY = touchEndY - this.touchStartY
+
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD && Math.abs(deltaY) < SWIPE_THRESHOLD) return
+
+    let direction = null
+    if (Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      direction = deltaX > 0 ? 'right' : 'left'
+    } else if (Math.abs(deltaY) > Math.abs(deltaX) * 1.5) {
+      direction = deltaY > 0 ? 'down' : 'up'
+    } else {
+      return
+    }
+
+    let moveDirection;
+    if (direction === 'left') moveDirection = 'right';
+    if (direction === 'right') moveDirection = 'left';
+    if (direction === 'up') moveDirection = 'down';
+    if (direction === 'down') moveDirection = 'up';
+
+    const emptyTile = this.tiles.find((t) => t.value === 0)
+    const emptyIndex = emptyTile.index
+    const row = Math.floor(emptyIndex / this.gridSize)
+    const col = emptyIndex % this.gridSize
+    let moveIndex = -1
+
+    if (moveDirection === 'left' && col > 0) moveIndex = emptyIndex - 1
+    else if (moveDirection === 'right' && col < this.gridSize - 1) moveIndex = emptyIndex + 1
+    else if (moveDirection === 'up' && row > 0) moveIndex = emptyIndex - this.gridSize
+    else if (moveDirection === 'down' && row < this.gridSize - 1) moveIndex = emptyIndex + this.gridSize
+
+    if (moveIndex !== -1) {
+      this.doMove(moveIndex, emptyIndex)
+    }
+  },
+
+  startGyroListener() {
+    sensor.subscribeAccelerometer({
+      callback: (ret) => {
+        if (!this.gameStarted || this.isMoving) return
+        
+        const now = new Date().getTime()
+        if (now - this.gyroLastTime < 500) return 
+
+        const x = ret.x
+        const y = ret.y
+        const threshold = 3 
+
+        let direction = null
+        if (Math.abs(x) > Math.abs(y)) {
+           if (x > threshold) direction = 'left'
+           if (x < -threshold) direction = 'right'
+        } else {
+           if (y > threshold) direction = 'down'
+           if (y < -threshold) direction = 'up'
+        }
+
+        if (direction) {
+            this.handleGyroMove(direction)
+            this.gyroLastTime = now
+        }
+      }
+    })
+  },
+
+  handleGyroMove(direction) {
+    const emptyTile = this.tiles.find((t) => t.value === 0)
+    const emptyIndex = emptyTile.index
+    const row = Math.floor(emptyIndex / this.gridSize)
+    const col = emptyIndex % this.gridSize
+    let moveIndex = -1
+
+    if (direction === 'left' && col < this.gridSize - 1) moveIndex = emptyIndex + 1
+    if (direction === 'right' && col > 0) moveIndex = emptyIndex - 1
+    if (direction === 'up' && row < this.gridSize - 1) moveIndex = emptyIndex + this.gridSize
+    if (direction === 'down' && row > 0) moveIndex = emptyIndex - this.gridSize
+    
+    if (moveIndex !== -1) {
+       this.doMove(moveIndex, emptyIndex)
+    }
+  },
+
+  forceWinTest() {
+    if (!this.gameStarted) return;
+    this.showWinModal = true;
+    this.gameStarted = false;
+    this.isTimerStarted = false;
+    if (this.timer) clearInterval(this.timer);
+    
+    this.finalTime = this.time > 0 ? this.time : 99;
+    this.finalSteps = this.steps > 0 ? this.steps : 99;
+    
+    try { sensor.unsubscribeAccelerometer() } catch(e){}
+    try { brightness.setKeepScreenOn({ keepScreenOn: false }) } catch(e){}
+    this.saveRecord();
+  },
+
+  checkWin() {
+    for (let i = 0; i < this.tiles.length - 1; i++) {
+      if (this.tiles[i].value !== i + 1) return
+    }
+    
+    this.showWinModal = true;
+    this.gameStarted = false;
+    this.isTimerStarted = false;
+    if (this.timer) clearInterval(this.timer);
+    
+    try { sensor.unsubscribeAccelerometer() } catch(e){}
+    try { brightness.setKeepScreenOn({ keepScreenOn: false }) } catch(e){}
+
+    this.finalTime = this.time;
+    this.finalSteps = this.steps;
+    
+    this.saveRecord();
+  },
+
+  routeLsjl() {
+    router.push({uri: "/pages/lsjl"})
+  },
+
+  routerBack() {
+    router.push({
+      uri: "/pages/index"
+    })
+  },
+
+  saveRecord() {
+    const storageKey = "bestScores"
+    storage.get({
+      key: storageKey,
+      success: (data) => {
+        let bestScores = {}
+        if (data && data !== '' && data !== 'null') {
+          try {
+            bestScores = JSON.parse(data) || {}
+          } catch (e) {
+            console.error("解析成绩失败", e)
+          }
+        }
+        
+        const mode = `${this.gridSize}x${this.gridSize}`
+        const currentBest = bestScores[mode]
+
+        if (
+          !currentBest ||
+          this.finalSteps < currentBest.steps ||
+          (this.finalSteps === currentBest.steps && this.finalTime < currentBest.time)
+        ) {
+          bestScores[mode] = {
+            steps: this.finalSteps,
+            time: this.finalTime
+          }
+          storage.set({key: storageKey, value: JSON.stringify(bestScores)})
+        }
+      },
+      fail: () => {
+        const bestScores = {}
+        const mode = `${this.gridSize}x${this.gridSize}`
+        bestScores[mode] = {steps: this.finalSteps, time: this.finalTime}
+        storage.set({key: storageKey, value: JSON.stringify(bestScores)})
+      }
+    })
+  }
+}
+</script>
+
+<style>
+/* 引入外部字体 */
+@font-face {
+  font-family: 'Elitakoo';
+  src: url('/common/data/AaMianHuatangNon.ttf');
+}
+
+/* ============================================================== */
+/* 第 1 层：跑道屏基础级样式 (跑道屏颜色及尺寸 192x490)           */
+/* ============================================================== */
+.container {
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+    background-color: #FAF8EF;
+}
+
+.selection-container {
+    flex-grow: 1;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.anim-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.selection-title {
+    font-size: 24px;
+    font-weight: bold;
+    color: #776E65;
+    width: 400px;
+    text-align: center;
+    lines: 1;
+}
+
+.selection-subtitle {
+    font-size: 16px;
+    color: #A09383;
+    margin-bottom: 25px;
+    width: 400px;
+    text-align: center;
+    lines: 1;
+}
+
+.selection-button {
+    width: 150px;
+    height: 45px;
+    font-size: 18px;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    background-color: #EEE4DA;
+    color: #776E65;
+    box-sizing: border-box;
+    border: 2px solid transparent;
+}
+
+.selection-button.history {
+    background-color: #EEE4DA;
+    color: #776E65;
+    border-color: transparent;
+}
+
+.selection-button.selected {
+    border-color: #8F7A66;
+    background-color: #8F7A66;
+    color: #FFFFFF;
+}
+
+.game-container {
+    flex-grow: 1;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    padding: 15px 1px;
+    background-color: #FDFBF7;
+}
+
+.button,
+.buttont {
+    object-fit: contain;
+}
+
+.button {
+    width: 103px;
+    height: 73px;
+}
+
+.buttont {
+    width: 90px;
+    height: 65px;
+}
+
+.base-only {
+    display: flex;
+}
+
+.pro-only {
+    display: none;
+}
+
+.header {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    margin-bottom: -30px;
+}
+
+.stats-text {
+    font-size: 16px;
+    color: #5C544D;
+}
+
+/* 新增：专门用于数字的字体样式 */
+.num-font {
+    font-family: 'Elitakoo';
+}
+
+.board-container {
+    width: 182px;
+    height: 182px;
+    justify-content: center;
+    align-items: center;
+    background-color: #B0A395;
+    border-radius: 20px;
+}
+
+.game-board {
+    width: 180px;
+    height: 180px;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    border-radius: 60px;
+}
+
+.tile-3 {
+    width: 60px;
+    height: 60px;
+}
+
+.tile-4 {
+    width: 45px;
+    height: 45px;
+}
+
+.tile-5 {
+    width: 36px;
+    height: 36px;
+}
+
+.text-3 {
+    font-size: 30px;
+}
+
+.text-4 {
+    font-size: 22.5px;
+}
+
+.text-5 {
+    font-size: 18px;
+}
+
+.tile {
+    background-color: #EAE0D5;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    border: 2px solid #B0A395;
+    border-radius: 10px;
+}
+
+.tile-text {
+    font-family: 'Elitakoo';
+    color: #5C544D;
+    font-weight: bold;
+}
+
+.empty {
+    background-color: transparent;
+    border-color: transparent;
+}
+
+.footer {
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ================== 新版弹窗样式 ================== */
+.modal {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(92, 84, 77, 0.6);
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    flex-direction: column;
+    align-items: center;
+    width: 175px;
+    padding: 20px 10px;
+    background-color: #FAF8EF;
+    border: 4px solid #EAE0D5;
+    border-radius: 20px;
+}
+
+.win-icon {
+    font-size: 32px;
+    margin-bottom: 5px;
+}
+
+.win-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #776E65;
+    margin-bottom: 12px;
+}
+
+.win-info-box {
+    flex-direction: column;
+    align-items: center;
+    background-color: #EEE4DA;
+    padding: 8px;
+    border-radius: 12px;
+    width: 150px;
+    margin-bottom: 15px;
+}
+
+.win-info {
+    font-size: 13px;
+    color: #776E65;
+    font-weight: bold;
+    line-height: 20px;
+}
+
+.modal-buttons {
+    flex-direction: row;
+    justify-content: space-around;
+    width: 100%;
+}
+
+.modal-btn-primary {
+    width: 70px;
+    height: 36px;
+    background-color: #8F7A66;
+    color: #FFFFFF;
+    border-radius: 18px;
+    font-size: 12px;
+    font-weight: bold;
+    border: none;
+}
+
+.modal-btn-secondary {
+    width: 70px;
+    height: 36px;
+    background-color: #D6CDC4;
+    color: #776E65;
+    border-radius: 18px;
+    font-size: 12px;
+    font-weight: bold;
+    border: none;
+}
+
+/* ============================================================== */
+/* 第 2 层：媒体查询 - 适配圆形表盘 (如 Watch S4 466x466 等)      */
+/* ============================================================== */
+@media (shape: circle) {
+    .selection-container {
+        padding: 40px 0;
+    }
+
+    .selection-title {
+        font-size: 28px;
+        margin-bottom: 10px;
+    }
+
+    .selection-button {
+        width: 250px;
+        height: 55px;
+        border-radius: 15px;
+    }
+
+    .base-only {
+        display: none;
+    }
+
+    .pro-only {
+        display: flex;
+    }
+
+    .game-container {
+        justify-content: center;
+        padding: 0;
+    }
+
+    .header {
+        margin-top: 45px;
+        margin-bottom: 15px;
+        padding: 0 40px;
+    }
+
+    .stats-text {
+    font-size: 16px;
+    color: #5C544D;
+  }
+
+    /* 新增：专门用于数字的字体样式 */
+    .num-font {
+        font-family: 'Elitakoo';
+    }
+
+    .board-container {
+        width: 260px;
+        height: 260px;
+        border-radius: 25px;
+        padding: 5px;
+    }
+
+    .game-board {
+        width: 240px;
+        height: 240px;
+        border-radius: 10px;
+    }
+
+    .tile-3 {
+        width: 80px;
+        height: 80px;
+    }
+
+    .tile-4 {
+        width: 60px;
+        height: 60px;
+    }
+
+    .tile-5 {
+        width: 48px;
+        height: 48px;
+    }
+
+    .text-3 {
+        font-size: 34px;
+    }
+
+    .text-4 {
+        font-size: 26px;
+    }
+
+    .text-5 {
+        font-size: 20px;
+    }
+
+    .tile {
+        border-radius: 15px;
+    }
+
+    .footer {
+        margin-top: 15px;
+        margin-bottom: 45px;
+    }
+
+    .footer-buttons {
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+    }
+
+    .buttont {
+        width: 80px;
+        height: 55px;
+        margin: 0 15px;
+    }
+
+    /* 圆形大屏的弹窗响应式放大 */
+    .modal-content {
+        width: 280px;
+        padding: 30px 20px;
+        border-radius: 30px;
+        border-width: 6px;
+    }
+
+    .win-icon {
+        font-size: 45px;
+        margin-bottom: 8px;
+    }
+
+    .win-title {
+        font-size: 22px;
+        margin-bottom: 15px;
+    }
+
+    .win-info-box {
+        width: 220px;
+        padding: 15px;
+        border-radius: 15px;
+        margin-bottom: 25px;
+    }
+
+    .win-info {
+        font-size: 16px;
+        line-height: 26px;
+    }
+
+    .modal-btn-primary,
+    .modal-btn-secondary {
+        width: 110px;
+        height: 46px;
+        border-radius: 23px;
+        font-size: 16px;
+    }
+}
+
+/* ============================================================== */
+/* 第 3 层：媒体查询 - 适配宽屏矩形设备 (如手环9 Pro 336x480) */
+/* ============================================================== */
+@media (min-width: 150) and (shape: rect) {
+    .selection-container {
+        padding: 20px;
+    }
+
+    .selection-title {
+        font-size: 28px;
+        margin-bottom: 10px;
+    }
+
+    .selection-button {
+        width: 250px;
+        height: 55px;
+        border-radius: 15px;
+    }
+
+    .game-container {
+        padding: 15px;
+    }
+
+    .base-only {
+        display: none;
+    }
+
+    .pro-only {
+        display: flex;
+    }
+
+    .header {
+        padding: 10px 0;
+        margin-bottom: 0;
+    }
+
+    .stats-text {
+      font-size: 16px;
+      color: #5C544D;
+    }
+
+    /* 新增：专门用于数字的字体样式 */
+    .num-font {
+      font-family: 'Elitakoo';
+    }
+
+    .board-container {
+        width: 300px;
+        height: 300px;
+        border-radius: 25px;
+        padding: 5px;
+    }
+
+    .game-board {
+        width: 280px;
+        height: 280px;
+        border-radius: 10px;
+    }
+
+    .tile-3 {
+        width: 93.3px;
+        height: 93.3px;
+    }
+
+    .tile-4 {
+        width: 70px;
+        height: 70px;
+    }
+
+    .tile-5 {
+        width: 56px;
+        height: 56px;
+    }
+
+    .text-3 {
+        font-size: 37px;
+    }
+
+    .text-4 {
+        font-size: 28px;
+    }
+
+    .text-5 {
+        font-size: 22.4px;
+    }
+
+    .tile {
+        border-radius: 15px;
+    }
+
+    .footer {
+        padding: 10px 0;
+    }
+
+    .footer-buttons {
+        flex-direction: row;
+        justify-content: space-around;
+        align-items: center;
+        width: 100%;
+    }
+
+    .buttont {
+        width: 90px;
+        height: 65px;
+    }
+
+    /* 宽矩形大屏的弹窗响应式放大 */
+    .modal-content {
+        width: 300px;
+        padding: 30px 20px;
+        border-radius: 25px;
+        border-width: 5px;
+    }
+
+    .win-icon {
+        font-size: 45px;
+        margin-bottom: 8px;
+    }
+
+    .win-title {
+        font-size: 22px;
+        margin-bottom: 15px;
+    }
+
+    .win-info-box {
+        width: 240px;
+        padding: 15px;
+        border-radius: 15px;
+        margin-bottom: 25px;
+    }
+
+    .win-info {
+        font-size: 16px;
+        line-height: 26px;
+    }
+
+    .modal-btn-primary,
+    .modal-btn-secondary {
+        width: 115px;
+        height: 46px;
+        border-radius: 23px;
+        font-size: 16px;
+    }
+}
+</style>
